@@ -1,0 +1,14 @@
+/dist/
+/target/
+/node_modules/
+/.vscode/
+/.zed/
+**/.idea/
+.DS_Store
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.keystore
+*.jks
