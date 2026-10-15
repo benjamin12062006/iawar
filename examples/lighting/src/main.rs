@@ -2,7 +2,7 @@
 #[cfg(not(target_arch = "wasm32"))]
 #[tokio::main]
 async fn main() {
-    run().await;
+    run().await.expect("could not prepare lighting scene");
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -19,7 +19,11 @@ enum MaterialType {
 
 use three_d::*;
 
-pub async fn run() {
+pub async fn run(
+    #[cfg(target_arch = "wasm32")] status: leptos::prelude::RwSignal<crate::canvas::SceneStatus>,
+) -> Result<(), String> {
+    #[cfg(target_arch = "wasm32")]
+    crate::canvas::loading_step(status, "Creando el contexto 3D…").await?;
     let window = Window::new(WindowSettings {
         title: "Lighting!".to_string(),
         max_size: Some((1280, 720)),
@@ -27,7 +31,7 @@ pub async fn run() {
         canvas: Some(crate::canvas::main_canvas()),
         ..Default::default()
     })
-    .unwrap();
+    .map_err(|error| error.to_string())?;
     let context = window.gl();
     let mut camera = Camera::new_perspective(
         window.viewport(),
@@ -41,23 +45,46 @@ pub async fn run() {
     let mut control = OrbitControl::new(camera.target(), 1.0, 100.0);
     let mut gui = three_d::GUI::new(&context);
 
+    #[cfg(target_arch = "wasm32")]
+    crate::canvas::loading_step(status, "Descargando el modelo 3D…").await?;
     // Source: https://github.com/KhronosGroup/glTF-Sample-Models/tree/master/2.0
-    let mut cpu_model: CpuModel =
-        three_d_asset::io::load_async(&["public/assets/gltf/DamagedHelmet.glb"])
-            .await
-            .unwrap()
-            .deserialize("")
-            .unwrap();
-    cpu_model
+    let mut assets = three_d_asset::io::load_async(&["public/assets/gltf/DamagedHelmet.glb"])
+        .await
+        .map_err(|error| error.to_string())?;
+    #[cfg(target_arch = "wasm32")]
+    crate::canvas::loading_step(status, "Decodificando el modelo y sus texturas…").await?;
+    let mut cpu_model: CpuModel = assets.deserialize("").map_err(|error| error.to_string())?;
+    for geometry in &mut cpu_model.geometries {
+        #[cfg(target_arch = "wasm32")]
+        crate::canvas::loading_step(status, "Preparando la geometría…").await?;
+        geometry.compute_tangents();
+    }
+    #[cfg(target_arch = "wasm32")]
+    crate::canvas::loading_step(status, "Preparando los materiales 3D…").await?;
+    let mut parts =
+        Model::<PhysicalMaterial>::new(&context, &cpu_model).map_err(|error| error.to_string())?;
+    if parts.is_empty() {
+        return Err("El modelo no contiene geometría renderizable".to_string());
+    }
+    let mut model = parts.remove(0);
+    #[cfg(target_arch = "wasm32")]
+    crate::canvas::loading_step(status, "Preparando el material alternativo…").await?;
+    let mesh = cpu_model
         .geometries
-        .iter_mut()
-        .for_each(|m| m.compute_tangents());
-    let mut model = Model::<PhysicalMaterial>::new(&context, &cpu_model)
-        .unwrap()
-        .remove(0);
-    let deferred_model = Model::<DeferredPhysicalMaterial>::new(&context, &cpu_model)
-        .unwrap()
-        .remove(0);
+        .iter()
+        .find_map(|primitive| match &primitive.geometry {
+            CpuGeometry::Triangles(mesh) => Some(mesh),
+            _ => None,
+        })
+        .ok_or("El modelo no contiene una malla de triángulos")?;
+    // Reuse GPU textures rather than uploading/creating mipmaps twice.
+    let mut deferred_model = Gm::new(
+        Mesh::new(&context, mesh),
+        DeferredPhysicalMaterial::from_physical_material(&model.material),
+    );
+    deferred_model.set_transformation(model.transformation());
+    #[cfg(target_arch = "wasm32")]
+    crate::canvas::loading_step(status, "Preparando el entorno y las luces…").await?;
 
     let mut cpu_plane = CpuMesh::square();
     cpu_plane
@@ -124,6 +151,11 @@ pub async fn run() {
     // main loop
     let mut shadows_enabled = true;
     let mut material_type = MaterialType::Forward;
+
+    #[cfg(target_arch = "wasm32")]
+    crate::canvas::loading_step(status, "Preparando el primer cuadro…").await?;
+    #[cfg(target_arch = "wasm32")]
+    let mut first_frame = true;
 
     window.render_loop(move |mut frame_input| {
         let mut panel_width = 0.0;
@@ -358,6 +390,14 @@ pub async fn run() {
         }
         screen.write(|| gui.render()).unwrap();
 
+        #[cfg(target_arch = "wasm32")]
+        if first_frame {
+            use leptos::prelude::Set;
+            status.set(crate::canvas::SceneStatus::Ready);
+            first_frame = false;
+        }
+
         FrameOutput::default()
     });
+    Ok(())
 }

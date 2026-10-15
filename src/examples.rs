@@ -15,14 +15,33 @@ pub enum ActiveExample {
 
 pub const ACTIVE_EXAMPLE: ActiveExample = ActiveExample::Lighting;
 
-pub fn run_active_example() {
+pub fn run_active_example(
+    #[cfg(target_arch = "wasm32")] status: leptos::prelude::RwSignal<crate::canvas::SceneStatus>,
+) {
     match ACTIVE_EXAMPLE {
-        ActiveExample::Shapes => shapes::run_scene(),
-        ActiveExample::Triangle => triangle::main(),
+        ActiveExample::Shapes => {
+            #[cfg(target_arch = "wasm32")]
+            {
+                use leptos::prelude::Set;
+                status.set(crate::canvas::SceneStatus::Ready);
+            }
+            shapes::run_scene();
+        }
+        ActiveExample::Triangle => {
+            #[cfg(target_arch = "wasm32")]
+            {
+                use leptos::prelude::Set;
+                status.set(crate::canvas::SceneStatus::Ready);
+            }
+            triangle::main();
+        }
         ActiveExample::Lighting => {
             #[cfg(target_arch = "wasm32")]
-            wasm_bindgen_futures::spawn_local(async {
-                lighting::run().await;
+            wasm_bindgen_futures::spawn_local(async move {
+                use leptos::prelude::Set;
+                if let Err(error) = lighting::run(status).await {
+                    status.set(crate::canvas::SceneStatus::Failed(error));
+                }
             });
         }
     }

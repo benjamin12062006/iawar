@@ -5,6 +5,10 @@ use leptos::{ev, leptos_dom::helpers::window_event_listener, prelude::*};
 pub fn App() -> impl IntoView {
     let (playing, set_playing_state) = signal(false);
     let (name, set_name) = signal(String::from("IAWAR"));
+    let scene_status = RwSignal::new(canvas::SceneStatus::Loading("Preparando mundo…"));
+
+    #[cfg(target_arch = "wasm32")]
+    canvas::run_canvas(scene_status);
 
     let _esc_listener = window_event_listener(ev::keydown, {
         let set_playing_state = set_playing_state;
@@ -17,6 +21,9 @@ pub fn App() -> impl IntoView {
     });
 
     let start = move |_| {
+        if scene_status.get() != canvas::SceneStatus::Ready {
+            return;
+        }
         set_playing_state.set(true);
         canvas::set_playing(true);
         canvas::focus_main_canvas();
@@ -67,9 +74,25 @@ pub fn App() -> impl IntoView {
                         class="mt-7 w-full rounded-lg bg-cyan-500 px-4 py-3 text-sm md:text-base font-semibold text-slate-950 hover:bg-cyan-400 active:bg-cyan-300 transition-colors"
                         type="button"
                         on:click=start
+                        disabled=move || scene_status.get() != canvas::SceneStatus::Ready
                     >
-                        "Click para iniciar"
+                        {move || match scene_status.get() {
+                            canvas::SceneStatus::Ready => "Click para iniciar",
+                            canvas::SceneStatus::Loading(_) => "Preparando escena 3D…",
+                            canvas::SceneStatus::Failed(_) => "Escena no disponible",
+                        }}
                     </button>
+                    <p class="mt-3 text-sm text-slate-200" role="status" aria-live="polite">
+                        {move || match scene_status.get() {
+                            canvas::SceneStatus::Loading(message) => {
+                                format!("{message} Puedes seguir usando este panel.")
+                            }
+                            canvas::SceneStatus::Ready => "Mundo listo.".to_string(),
+                            canvas::SceneStatus::Failed(error) => {
+                                format!("No se pudo preparar el mundo: {error}")
+                            }
+                        }}
+                    </p>
                 </section>
             </div>
         </div>

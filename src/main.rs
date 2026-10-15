@@ -8,7 +8,7 @@ use leptos::prelude::*;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 #[cfg(target_arch = "wasm32")]
-use wasm_bindgen::{closure::Closure, JsCast};
+use wasm_bindgen::JsCast;
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen(start)]
@@ -21,14 +21,6 @@ pub fn start() -> Result<(), JsValue> {
         .dyn_into::<web_sys::HtmlElement>()?;
     mount_to(app_root, || view! { <app::App /> }).forget();
 
-    if let Some(window) = web_sys::window() {
-        let cb = Closure::once(|| {
-            canvas::run_canvas();
-        });
-        let _ = window
-            .set_timeout_with_callback_and_timeout_and_arguments_0(cb.as_ref().unchecked_ref(), 0);
-        cb.forget();
-    }
     Ok(())
 }
 

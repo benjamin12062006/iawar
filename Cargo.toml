@@ -13,6 +13,7 @@ console_error_panic_hook = "0.1.7"
 three-d = { version = "0.19.0", features = ["egui-gui"] }
 three-d-asset = { version = "0.10", features = ["gltf", "jpeg", "http"] }
 wasm-bindgen-futures = "0.4"
+expression_evaluator = { path = "crates/expression_evaluator" }
 
 [workspace]
-members = ["src-tauri"]
+members = ["src-tauri", "crates/expression_evaluator"]
